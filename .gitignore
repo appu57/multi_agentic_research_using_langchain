@@ -1,0 +1,4 @@
+.env
+logs
+custom_logger/issues.md
+__pycache__/
