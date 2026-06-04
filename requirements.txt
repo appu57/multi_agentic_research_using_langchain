@@ -13,3 +13,4 @@ readability-lxml
 trafilatura 
 requests>=2.31.0
 lxml>=5.0.0
+rich

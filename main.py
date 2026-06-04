@@ -1,10 +1,8 @@
 import logging
 import custom_logger.logger_config
-from src.tools.tools import web_search, load_secretKeys, initialise_tavily_client
-
+from src.pipeline.pipeline import run_research_pipeline
 logger = logging.getLogger(__name__)
 
-load_secretKeys()
-initialise_tavily_client()
-web_search_result = web_search("What is the capital of France?")
-logger.info(f"Web search result: {web_search_result}")
+topic = "The impact of AI on the job market in 2026"
+results= run_research_pipeline(topic)
+logger.info(f"Web search result: {results}")
