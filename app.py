@@ -1,8 +1,10 @@
 import streamlit as st
 import time
-from src.agents.agents import load_secretKeys_agents, use_search_agent, use_scraper_agent, initialize_chains, writer_chain, critic_chain
+from src.agents.agents import load_secretKeys_agents, build_search_agent, use_scraper_agent, initialize_chains
 from src.pipeline.pipeline import run_research_pipeline
+import logging
 
+logger = logging.getLogger(__name__)
 st.set_page_config(
     page_title="Multi-Agent Research Assistant",
     page_icon="🔍",
@@ -10,6 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+#CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
@@ -297,4 +300,265 @@ details summary {
     letter-spacing: 0.08em;
 }
 </style>
+""", unsafe_allow_html=True)
+
+#STEP CARD COMPONENT
+def step_card(num: str, title: str, state: str, desc: str = ""):
+    status_map = {
+        "waiting": ("WAITING", "status-waiting"),
+        "running": ("● RUNNING", "status-running"),
+        "done":    ("✓ DONE",   "status-done"),
+    }
+
+    label, cls = status_map.get(state, ("", ""))
+    card_cls = {"running": "active", "done": "done"}.get(state, "")
+
+    st.markdown(f"""
+    <div class="step-card {card_cls}">
+        <div class="step-header">
+            <span class="step-num">{num}</span>
+            <span class="step-title">{title}</span>
+            <span class="step-status {cls}">{label}</span>
+        </div>
+        {"<div style='font-size:0.82rem;color:#94a3b8;margin-top:0.3rem;'>"+desc+"</div>" if desc else ""}
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ── Session state init ────────────────────────────────────────────────────────
+for key in ("results", "running", "done"):
+    if key not in st.session_state:
+        st.session_state[key] = {} if key == "results" else False
+
+
+# ── Hero ──────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="hero">
+    <div class="hero-eyebrow">Multi-Agent AI System</div>
+    <h1>Researcher<span>Agent</span></h1>
+    <p class="hero-sub">
+        Four specialized AI agents collaborate — searching, scraping, writing,
+        and critiquing — to deliver a polished research report on any topic.
+    </p>
+</div>
+
+<div class="divider"></div>
+""", unsafe_allow_html=True)
+
+
+# ── Layout: input left, pipeline right ───────────────────────────────────────
+col_input, col_spacer, col_pipeline = st.columns([5, 0.5, 4])
+
+with col_input:
+
+    st.markdown('<div class="input-card">', unsafe_allow_html=True)
+
+    topic = st.text_input(
+        "Research Topic",
+        placeholder="e.g. Roadmap for AGI development in next 5 years",
+        key="topic_input",
+        label_visibility="visible",
+    )
+
+    run_btn = st.button(
+        "⚡ Run Research Pipeline",
+        use_container_width=True
+    )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Example chips
+    st.markdown("""
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.5rem;">
+        <span style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#7f93ad;letter-spacing:0.1em;">
+            TRY →
+        </span>
+    """, unsafe_allow_html=True)
+
+    examples = [
+        "Future of LLM in Tech Industry",
+        "All Lastest AI Agents in 2026",
+        "Roadmap for AGI development in next 5 years",
+    ]
+
+    for ex in examples:
+        st.markdown(f"""
+        <span style="
+            background:rgba(255,255,255,0.05);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:8px;
+            padding:0.35rem 0.8rem;
+            font-size:0.75rem;
+            color:#d8e2f0;
+            font-family:'DM Sans',sans-serif;
+            cursor:default;
+        ">
+            {ex}
+        </span>
+        """, unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with col_pipeline:
+
+    st.markdown(
+        '<div class="section-heading">Pipeline</div>',
+        unsafe_allow_html=True
+    )
+
+    r = st.session_state.results
+    done = st.session_state.done
+
+    def s(step):
+
+        if not r:
+            return "waiting"
+
+        steps = ["search", "reader", "writer", "critic"]
+
+        if step in r:
+            return "done"
+
+        if st.session_state.running:
+            for k in steps:
+                if k not in r:
+                    return "running" if k == step else "waiting"
+
+        return "waiting"
+
+    step_card(
+        "01",
+        "Search Agent",
+        s("search"),
+        "Gathers recent web information"
+    )
+
+    step_card(
+        "02",
+        "Reader Agent",
+        s("reader"),
+        "Scrapes & extracts deep content"
+    )
+
+    step_card(
+        "03",
+        "Writer Chain",
+        s("writer"),
+        "Drafts the full research report"
+    )
+
+    step_card(
+        "04",
+        "Critic Chain",
+        s("critic"),
+        "Reviews & scores the report"
+    )
+
+#RUN pipeline
+if run_btn:
+    if not topic.strip():
+        st.warning("Please enter a research topic to proceed.")
+    else:
+        st.session_state.running = True
+        st.session_state.results = {}
+        st.session_state.done = False
+        st.rerun()  # Trigger a rerun to update the UI immediately
+
+        # with st.spinner("Running research pipeline... This may take a few moments."):
+        #     results = run_research_pipeline(topic)
+        #     st.session_state.results = results
+        #     st.session_state.done = True
+
+if st.session_state.running and not st.session_state.done:
+    results = {}
+    topic_val = st.session_state.topic_input.strip()
+
+    #Search
+    with st.spinner("Running the entire pipeline Agent..."):
+        results = run_research_pipeline(topic_val)
+        logger.info(f"Pipeline execution completed with results: {results}")
+        logger.info(dict(results)) #returns a dict with keys: content, tool_calls, tool_calls_metadata
+        st.session_state.results = results
+        st.session_state.running = False
+        st.session_state.done = True
+
+        st.rerun()  # Trigger a rerun to update the UI with results Why? Because the pipeline runs in a blocking manner, and we want to update the UI to reflect the new state (results obtained, pipeline done) immediately after the pipeline execution finishes. By calling st.rerun(), we force Streamlit to re-render the app, which will then display the updated step cards and results panels based on the new session state. Without this, the UI would not reflect the changes until the next user interaction or manual refresh.
+
+r = st.session_state.results
+if r:
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)   
+    st.markdown(
+        '<div class="section-heading">Results</div>',
+        unsafe_allow_html=True
+    )
+    if 'search_result' in r:
+        with st.expander("🔍 Search Results (raw)", expanded=False):
+            st.markdown(
+                f'''
+                <div class="result-panel">
+                    <div class="result-panel-title">
+                        Search Agent Output
+                    </div>
+
+                    <div class="result-content">
+                        {r["search_result"]}
+                    </div>
+                </div>
+                ''',
+                unsafe_allow_html=True
+            )
+    if 'scapped_content' in r:
+        with st.expander("📄 Scraped Content (raw)", expanded=False):
+            st.markdown(
+                f'''
+                <div class="result-panel">
+                    <div class="result-panel-title">
+                        Reader Agent Output
+                    </div>
+
+                    <div class="result-content">
+                        {r["scapped_content"]}
+                    </div>
+                </div>
+                ''',
+                unsafe_allow_html=True
+            )
+    
+    if 'report' in r:
+        st.markdown("""
+        <div class="report-panel">
+            <div class="panel-label orange">
+                📝 Final Research Report
+            </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(r["report"])
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        #download button for report
+        st.download_button(
+            label="Download Report",
+            data=r["report"],
+            file_name=f'research_report_{st.session_state.topic_input.strip().replace(" ", "_")}.txt',
+            mime='text/markdown',
+            key="download_report"   
+        )
+
+    if 'feedback' in r:
+        st.markdown("""
+        <div class="feedback-panel">
+            <div class="panel-label green">
+                🧐 Critic Feedback
+            </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(r["feedback"])
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="notice">
+    ResearchAgent · Powered by LangChain multi-agent pipeline · Built with Streamlit
+</div>
 """, unsafe_allow_html=True)
