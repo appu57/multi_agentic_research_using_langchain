@@ -5,22 +5,27 @@ from langchain_core.output_parsers import StrOutputParser # StrOutputParser is a
 from src.tools.tools import web_search, scrape_url
 from dotenv import load_dotenv
 import os
+from langchain_groq import ChatGroq
+import logging
 
-OPENAI_API_KEY = None
+logger = logging.getLogger(__name__)
+GROQ_API_KEY = None
 llm = None
 writer_chain = None
 critic_chain = None
 def load_secretKeys_agents():
     load_dotenv()
-    global OPENAI_API_KEY 
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    global GROQ_API_KEY 
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 def initialize_llm():
-    global llm
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        temperature=0.7,
-        openai_api_key=OPENAI_API_KEY
+    global llm, GROQ_API_KEY
+    if GROQ_API_KEY is None:
+        load_secretKeys_agents()
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0.0, #0.7 introduces creative variance, which increases the likelihood of formatting errors. For structured agents relying on tool calling, the temperature should ideally be scaled down close to 0 to keep the syntax generation predictable and compliant with Groq's formatting engine.
+        api_key=GROQ_API_KEY
     )
 
 def build_search_agent():
@@ -35,6 +40,11 @@ def build_search_agent():
     search_agent = create_agent(
         model=llm,
         tools=[web_search],
+        system_prompt=(
+            "You are a precise research assistant. When you need to search, "
+            "invoke your tool call strictly using valid JSON formatting. Do not wrap your "
+            "tool requests in text, codeblocks, markdown tags, or custom tags like <function>."
+        )
     )
     return search_agent
 
@@ -43,6 +53,10 @@ def use_scraper_agent():
     scraper_agent = create_agent(
         model=llm,
         tools=[scrape_url],
+        system_prompt=(
+            "You are a structural content scraper. When parsing URLs, "
+            "format your tool inputs strictly as clear JSON objects without any wrapper tags."
+        )
     )
     return scraper_agent
 
@@ -94,6 +108,7 @@ def initialize_chains():
     ])
 
     critic_chain = critic_prompt | llm | StrOutputParser()
+    return writer_chain, critic_chain
 
 # We now don't use chatPromptTemplate for the agents, instead we directly create agents using create_agent and pass the tools. The prompts are now only used for the writer and critic chains, which are separate from the search and scraper agents. This allows us to have more flexibility in how we structure the interactions with the agents and use the tools effectively.
 # def create_agent(

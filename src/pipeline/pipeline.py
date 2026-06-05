@@ -1,13 +1,13 @@
-from src.agents.agents import load_secretKeys_agents, initialize_llm, build_search_agent, use_scraper_agent, initialize_chains, writer_chain, critic_chain
+from src.agents.agents import load_secretKeys_agents, initialize_llm, build_search_agent, use_scraper_agent, initialize_chains
 import logging
 from src.tools.tools import web_search, load_secretKeys_tools, initialise_tavily_client
 
 logger = logging.getLogger(__name__)
 
 def run_research_pipeline(topic:str) -> dict:
+    load_secretKeys_agents()
     load_secretKeys_tools()
     initialise_tavily_client()
-    load_secretKeys_agents()
     initialize_llm()
 
     state = {}
@@ -45,7 +45,7 @@ def run_research_pipeline(topic:str) -> dict:
         f"Scrapped Content:\n{state['scapped_content']}"
     )
 
-    initialize_chains()
+    writer_chain, critic_chain =  initialize_chains()
 
     state['report'] = writer_chain.invoke({
         "topic": topic,
